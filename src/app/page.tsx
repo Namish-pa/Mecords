@@ -20,7 +20,6 @@ import {
   Trash2,
   X,
   FileText,
-  Binary,
   FileCode,
   Calendar,
   Hash,
@@ -39,6 +38,7 @@ import Image from "next/image";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { type ImageItem } from "@/template/left_page";
 
 const PDFDownloadButton = dynamic(
   () =>
@@ -95,13 +95,15 @@ export default function Home() {
   const COVER_PAGE_DOC_URL =
     "https://www.dropbox.com/scl/fo/qquvekt18178myxhrtmdz/ADwXBUgmfLa6QiHLl7ZCde4/COVER%20PAGE%20(%20MEC%20LAB%20RECORD%20).docx?rlkey=bx9dl3nyf7kisnxgj87aqv1xr&st=1r32p60i&dl=0";
 
-  const [program, setProgram] = useState("");
-  const [output, setOutput] = useState("");
-  const [outputImage, setOutputImage] = useState<string | undefined | null>(
-    undefined
-  );
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ── Test Data(Input and Output) (left page) state ─────────────────────
+  const [inputText, setInputText] = useState("");
+  const [inputImages, setInputImages] = useState<ImageItem[]>([]);
+  const inputImagesRef = useRef<HTMLInputElement>(null);
+  const [outputText, setOutputText] = useState("");
+  const [outputImages, setOutputImages] = useState<ImageItem[]>([]);
+  const outputImagesRef = useRef<HTMLInputElement>(null);
 
+  // ── Aim, Algorithm & Result (right page) state ──────────────────────────
   const [experimentNumber, setExperimentNumber] = useState("");
   const [experimentDate, setExperimentDate] = useState("");
   const [experimentTitle, setExperimentTitle] = useState("");
@@ -110,6 +112,7 @@ export default function Home() {
     { id: crypto.randomUUID(), text: "Start", hasCode: false, code: "", isHeading: false },
     { id: crypto.randomUUID(), text: "Stop", hasCode: false, code: "", isHeading: false },
   ]);
+  const [experimentProgram, setExperimentProgram] = useState("");
   const [experimentResult, setExperimentResult] = useState(
     "Program has been executed successfully and obtained the output."
   );
@@ -229,6 +232,7 @@ export default function Home() {
         experimentTitle,
         experimentAim,
         stepsLength: algorithmSteps.length,
+        experimentProgram,
         experimentResult,
         resultOnNewPage,
       });
@@ -243,6 +247,7 @@ export default function Home() {
               experimentTitle: experimentTitle || "",
               experimentAim: experimentAim || "",
               algorithmSteps: validatedSteps,
+              experimentProgram: experimentProgram || "",
               experimentResult: experimentResult || "",
               resultOnNewPage: resultOnNewPage,
             }}
@@ -256,37 +261,47 @@ export default function Home() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        console.error("File is not an image:", file.type);
-        return;
-      }
-
+  const readFiles = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: React.Dispatch<React.SetStateAction<ImageItem[]>>,
+    ref: React.RefObject<HTMLInputElement | null>
+  ) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
       const reader = new FileReader();
       reader.onload = () => {
-        try {
-          const result = reader.result as string;
-          console.log("Image loaded successfully, size:", result.length);
-          setOutputImage(result);
-        } catch (error) {
-          console.error("Error loading image:", error);
-        }
-      };
-      reader.onerror = (error) => {
-        console.error("FileReader error:", error);
+        setter((prev) => [
+          ...prev,
+          { src: reader.result as string, caption: "" },
+        ]);
       };
       reader.readAsDataURL(file);
-    }
+    });
+    if (ref.current) ref.current.value = "";
   };
 
-  const removeImage = () => {
-    setOutputImage(undefined);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
+  const handleInputImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) =>
+    readFiles(e, setInputImages, inputImagesRef);
+
+  const removeInputImage = (index: number) =>
+    setInputImages((prev) => prev.filter((_, i) => i !== index));
+
+  const updateInputImageCaption = (index: number, caption: string) =>
+    setInputImages((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, caption } : item))
+    );
+
+  const handleOutputImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) =>
+    readFiles(e, setOutputImages, outputImagesRef);
+
+  const removeOutputImage = (index: number) =>
+    setOutputImages((prev) => prev.filter((_, i) => i !== index));
+
+  const updateOutputImageCaption = (index: number, caption: string) =>
+    setOutputImages((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, caption } : item))
+    );
 
   const handleIndexPDFDownload = () => {
     if (typeof window === "undefined") return null;
@@ -356,21 +371,21 @@ export default function Home() {
                     className="flex items-center gap-2"
                   >
                     <FileText className="h-4 w-4" />
-                    <span>Aim, Algorithm & Result</span>
+                    <span>Aim, Algorithm, Program, Result</span>
                   </SelectItem>
                   <SelectItem
                     value="simple"
                     className="flex items-center gap-2"
                   >
                     <FileCode className="h-4 w-4" />
-                    <span>Program & Output</span>
+                    <span>Test Data(Input and Output)</span>
                   </SelectItem>
                   <SelectItem
                     value="coverpage"
                     className="flex items-center gap-2"
                   >
                     <FileType className="h-4 w-4" />
-                    <span>Cover Page</span>
+                    <span>Cover page</span>
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -391,85 +406,191 @@ export default function Home() {
             <CardContent className="pt-6">
               {templateType === "simple" ? (
                 <div className="grid gap-6">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Binary className="h-4 w-4 text-slate-500" />
-                      <Label htmlFor="program" className="font-medium">
-                        Program
-                      </Label>
-                    </div>
-                    <Textarea
-                      id="program"
-                      placeholder="Paste your program code here..."
-                      className="min-h-[200px] font-mono bg-slate-50"
-                      value={program}
-                      onChange={(e) => setProgram(e.target.value)}
-                    />
-                  </div>
-
+                  {/* ── INPUT section ─────────────────────────────────── */}
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <FileOutput className="h-4 w-4 text-slate-500" />
-                      <Label htmlFor="output" className="font-medium">
-                        Output (optional)
-                      </Label>
+                      <Label htmlFor="input-text" className="font-medium">Input</Label>
                     </div>
                     <Textarea
-                      id="output"
-                      placeholder="Paste your program output here..."
-                      className="min-h-[150px] font-mono bg-slate-50"
-                      value={output}
-                      onChange={(e) => setOutput(e.target.value)}
+                      id="input-text"
+                      placeholder="Enter input description or commands..."
+                      className="min-h-[120px] font-mono bg-slate-50"
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
                     />
                   </div>
 
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <ImageIcon className="h-4 w-4 text-slate-500" />
-                      <Label htmlFor="output-image" className="font-medium">
-                        Output Image (optional)
-                      </Label>
+                      <Label className="font-medium">Input Images (optional)</Label>
                     </div>
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
-                          onClick={() => fileInputRef.current?.click()}
+                          onClick={() => inputImagesRef.current?.click()}
                           className="bg-slate-50"
                         >
-                          Choose Image
+                          Add Image(s)
                         </Button>
                         <Input
-                          ref={fileInputRef}
-                          id="output-image"
+                          ref={inputImagesRef}
                           type="file"
                           accept="image/*"
-                          onChange={handleImageUpload}
+                          multiple
+                          onChange={handleInputImagesUpload}
                           className="hidden"
                         />
                         <p className="text-sm text-muted-foreground">
-                          {outputImage ? "Image selected" : "No image selected"}
+                          {inputImages.length === 0
+                            ? "No images added"
+                            : `${inputImages.length} image${
+                                inputImages.length > 1 ? "s" : ""
+                              } added`}
                         </p>
                       </div>
+                      {inputImages.length > 0 && (
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {inputImages.map((img, idx) => (
+                            <div
+                              key={idx}
+                              className="relative border rounded-md p-2 bg-slate-50 w-[150px] flex flex-col"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-1 right-1 h-5 w-5 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500 z-10"
+                                onClick={() => removeInputImage(idx)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <div className="h-[80px] flex items-center justify-center overflow-hidden">
+                                <Image
+                                  src={img.src}
+                                  alt={`Input image ${idx + 1}`}
+                                  width={120}
+                                  height={80}
+                                  style={{ objectFit: "contain", maxHeight: "80px" }}
+                                />
+                              </div>
+                              <div className="mt-2 flex flex-col gap-1">
+                                <Label
+                                  htmlFor={`input-desc-${idx}`}
+                                  className="text-xs text-muted-foreground font-medium"
+                                >
+                                  Description
+                                </Label>
+                                <Input
+                                  id={`input-desc-${idx}`}
+                                  type="text"
+                                  placeholder="Caption..."
+                                  value={img.caption}
+                                  onChange={(e) =>
+                                    updateInputImageCaption(idx, e.target.value)
+                                  }
+                                  className="h-7 text-xs px-2 bg-white"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                      {outputImage && (
-                        <div className="relative border rounded-md p-4 mt-2 bg-slate-50">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-2 right-2 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500"
-                            onClick={removeImage}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                          <Image
-                            src={outputImage || "/placeholder.svg"}
-                            alt="Output Preview"
-                            className="max-h-[200px] object-contain mx-auto"
-                            width={400}
-                            height={200}
-                            style={{ objectFit: "contain", maxHeight: "200px" }}
-                          />
+                  {/* ── OUTPUT section ────────────────────────────────── */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileOutput className="h-4 w-4 text-slate-500" />
+                      <Label htmlFor="output-text" className="font-medium">Output</Label>
+                    </div>
+                    <Textarea
+                      id="output-text"
+                      placeholder="Enter output description or commands..."
+                      className="min-h-[120px] font-mono bg-slate-50"
+                      value={outputText}
+                      onChange={(e) => setOutputText(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <ImageIcon className="h-4 w-4 text-slate-500" />
+                      <Label className="font-medium">Output Images (optional)</Label>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => outputImagesRef.current?.click()}
+                          className="bg-slate-50"
+                        >
+                          Add Image(s)
+                        </Button>
+                        <Input
+                          ref={outputImagesRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleOutputImagesUpload}
+                          className="hidden"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          {outputImages.length === 0
+                            ? "No images added"
+                            : `${outputImages.length} image${
+                                outputImages.length > 1 ? "s" : ""
+                              } added`}
+                        </p>
+                      </div>
+                      {outputImages.length > 0 && (
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {outputImages.map((img, idx) => (
+                            <div
+                              key={idx}
+                              className="relative border rounded-md p-2 bg-slate-50 w-[150px] flex flex-col"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-1 right-1 h-5 w-5 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500 z-10"
+                                onClick={() => removeOutputImage(idx)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <div className="h-[80px] flex items-center justify-center overflow-hidden">
+                                <Image
+                                  src={img.src}
+                                  alt={`Output image ${idx + 1}`}
+                                  width={120}
+                                  height={80}
+                                  style={{ objectFit: "contain", maxHeight: "80px" }}
+                                />
+                              </div>
+                              <div className="mt-2 flex flex-col gap-1">
+                                <Label
+                                  htmlFor={`output-desc-${idx}`}
+                                  className="text-xs text-muted-foreground font-medium"
+                                >
+                                  Description
+                                </Label>
+                                <Input
+                                  id={`output-desc-${idx}`}
+                                  type="text"
+                                  placeholder="Caption..."
+                                  value={img.caption}
+                                  onChange={(e) =>
+                                    updateOutputImageCaption(idx, e.target.value)
+                                  }
+                                  className="h-7 text-xs px-2 bg-white"
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -672,6 +793,22 @@ export default function Home() {
 
                   <div>
                     <div className="flex items-center gap-2 mb-2">
+                      <FileCode className="h-4 w-4 text-slate-500" />
+                      <Label htmlFor="exp-program" className="font-medium">
+                        Program
+                      </Label>
+                    </div>
+                    <Textarea
+                      id="exp-program"
+                      placeholder="Paste your program code here..."
+                      className="min-h-[200px] font-mono bg-slate-50"
+                      value={experimentProgram}
+                      onChange={(e) => setExperimentProgram(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
                       <CheckCircle2 className="h-4 w-4 text-slate-500" />
                       <Label htmlFor="exp-result" className="font-medium">
                         Result
@@ -699,6 +836,8 @@ export default function Home() {
                       />
                     </div>
                   </div>
+
+
                 </div>
               ) : (
                 <div className="grid gap-6">
@@ -831,48 +970,84 @@ export default function Home() {
               <div className="bg-white border border-slate-200 rounded-md p-8 shadow-sm max-w-[800px] mx-auto">
                 {templateType === "simple" ? (
                   <div className="a4-preview simple-template">
-                    <div className="mb-6">
-                      <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                        <Binary className="h-4.5 w-4.5 text-slate-500" />
-                        Program
-                      </h3>
-                      <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
-                        <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
-                          {program || "// program"}
-                        </pre>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                        <FileOutput className="h-4.5 w-4.5 text-slate-500" />
-                        Output
-                      </h3>
-                      <div className="flex flex-col gap-2.5">
-                        {outputImage && (
-                          <div>
-                            <div className="bg-slate-50 p-4 rounded-md border border-slate-200 flex justify-center">
-                              <Image
-                                src={outputImage || "/placeholder.svg"}
-                                alt="Output Preview"
-                                className="max-h-[200px] object-contain"
-                                width={400}
-                                height={200}
-                                style={{
-                                  objectFit: "contain",
-                                  maxHeight: "200px",
-                                }}
-                              />
+                    {/* Input preview */}
+                    {(inputText || inputImages.length > 0) && (
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                          <FileOutput className="h-4.5 w-4.5 text-slate-500" />
+                          Input
+                        </h3>
+                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200 space-y-3">
+                          {inputText && (
+                            <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
+                              {inputText}
+                            </pre>
+                          )}
+                          {inputImages.length > 0 && (
+                            <div className="grid grid-cols-2 gap-4">
+                              {inputImages.map((img, idx) => (
+                                <div key={idx} className="flex flex-col items-center">
+                                  <Image
+                                    src={img.src}
+                                    alt={`Input image ${idx + 1}`}
+                                    width={400}
+                                    height={200}
+                                    style={{ objectFit: "contain", maxHeight: "200px" }}
+                                  />
+                                  {img.caption ? (
+                                    <p className="text-xs text-slate-500 mt-1 text-center font-serif">
+                                      {img.caption}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
                             </div>
-                          </div>
-                        )}
-                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
-                          <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
-                            {output || "// output"}
-                          </pre>
+                          )}
                         </div>
                       </div>
-                    </div>
+                    )}
+
+                    {/* Output preview */}
+                    {(outputText || outputImages.length > 0) && (
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                          <FileOutput className="h-4.5 w-4.5 text-slate-500" />
+                          Output
+                        </h3>
+                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200 space-y-3">
+                          {outputText && (
+                            <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
+                              {outputText}
+                            </pre>
+                          )}
+                          {outputImages.length > 0 && (
+                            <div className="grid grid-cols-2 gap-4">
+                              {outputImages.map((img, idx) => (
+                                <div key={idx} className="flex flex-col items-center">
+                                  <Image
+                                    src={img.src}
+                                    alt={`Output image ${idx + 1}`}
+                                    width={400}
+                                    height={200}
+                                    style={{ objectFit: "contain", maxHeight: "200px" }}
+                                  />
+                                  {img.caption ? (
+                                    <p className="text-xs text-slate-500 mt-1 text-center font-serif">
+                                      {img.caption}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fallback when nothing entered */}
+                    {!inputText && inputImages.length === 0 && !outputText && outputImages.length === 0 && (
+                      <p className="text-sm text-slate-400 italic">Enter input or output above to see a preview.</p>
+                    )}
                   </div>
                 ) : templateType === "experiment" ? (
                   <div className="a4-preview experiment-template">
@@ -961,7 +1136,19 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div>
+                    <div className="mb-6">
+                      <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                        <FileCode className="h-4.5 w-4.5 text-slate-500" />
+                        Program
+                      </h3>
+                      <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                        <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
+                          {experimentProgram || "// program"}
+                        </pre>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
                       <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
                         <CheckCircle2 className="h-4.5 w-4.5 text-slate-500" />
                         Result
@@ -973,6 +1160,7 @@ export default function Home() {
                         </p>
                       </div>
                     </div>
+
                   </div>
                 ) : (
                   <div className="a4-preview index-template">
@@ -1059,16 +1247,16 @@ export default function Home() {
         {templateType === "simple" ? (
           <Suspense fallback={<Button disabled>Loading PDF...</Button>}>
             <PDFDownloadButton
-              key={`pdf-${
-                outputImage ? "with-image" : "no-image"
-              }-${Date.now()}`}
-              program={program}
-              output={output}
-              image={outputImage || undefined}
+              key={`pdf-simple-${Date.now()}`}
+              inputText={inputText}
+              inputImages={inputImages}
+              outputText={outputText}
+              outputImages={outputImages}
               resetTrigger={JSON.stringify({
-                program,
-                output,
-                hasImage: !!outputImage,
+                inputText,
+                inputImages,
+                outputText,
+                outputImages,
               })}
             />
           </Suspense>

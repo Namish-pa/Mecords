@@ -16,71 +16,150 @@ Font.register({
   src: "https://cdn.jsdelivr.net/npm/@fontsource/eb-garamond@4.5.0/files/eb-garamond-latin-400-normal.woff",
 });
 
+export interface ImageItem {
+  src: string;
+  caption: string;
+}
+
+interface PDFDocumentProps {
+  inputText?: string;
+  inputImages?: ImageItem[];
+  outputText?: string;
+  outputImages?: ImageItem[];
+}
+
 const styles = StyleSheet.create({
   page: {
     padding: "1cm",
     fontFamily: "Latin Modern Roman",
+    fontSize: 12,
+    lineHeight: 0.7,
   },
-  sectionTitle: {
+  // First section header — no top margin
+  firstSectionHeader: {
     fontSize: 14,
-    fontWeight: "semibold",
-    marginTop: 6,
-    marginBottom: 5,
-    borderBottom: "1pt solid black",
-    paddingBottom: 2,
+    fontFamily: "Latin Modern Roman",
+    textDecoration: "underline",
+    marginTop: "0.2cm",
+    marginBottom: "0.5cm",
   },
-  code: {
-    backgroundColor: "#f5f5f5",
-    padding: 10,
-    fontFamily: "Courier",
-    fontSize: 10,
+  // Subsequent section headers
+  sectionHeader: {
+    fontSize: 14,
+    fontFamily: "Latin Modern Roman",
+    textDecoration: "underline",
+    marginTop: "1cm",
+    marginBottom: "0.5cm",
+  },
+  content: {
+    lineHeight: 0.8,
+    marginBottom: "-0.2cm",
+  },
+  imageRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  gridCellLeft: {
+    width: "48%",
     marginBottom: 10,
-    whiteSpace: "pre-wrap",
+    alignItems: "center",
+    marginRight: "4%",
   },
-  imageContainer: {
-    marginTop: 15,
-    marginBottom: 15,
+  gridCellRight: {
+    width: "48%",
+    marginBottom: 10,
     alignItems: "center",
   },
   image: {
-    width: "210px",
-    marginHorizontal: "auto",
+    width: "100%",
+    height: 180,
+    objectFit: "contain",
+  },
+  caption: {
+    fontSize: 9,
+    fontFamily: "Latin Modern Roman",
+    textAlign: "center",
+    marginTop: 4,
   },
 });
 
-interface PDFDocumentProps {
-  program: string;
-  output?: string;
-  image?: string;
-}
+export const PDFDocument = ({
+  inputText,
+  inputImages = [],
+  outputText,
+  outputImages = [],
+}: PDFDocumentProps) => {
+  const hasInput = !!(inputText || inputImages.length > 0);
+  const hasOutput = !!(outputText || outputImages.length > 0);
 
-export const PDFDocument = ({ program, output, image }: PDFDocumentProps) => (
-  <Document>
-    <Page size="A4" style={styles.page}>
-      <View style={styles.sectionTitle}>
-        <Text>Program</Text>
-      </View>
-      <View style={styles.code}>
-        <Text>{preserveWhitespaceForPdf(program || "// program")}</Text>
-      </View>
-
-      {(output || image) && (
-        <>
-          <View style={styles.sectionTitle}>
-            <Text>Output</Text>
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* INPUT */}
+        {hasInput && (
+          <View>
+            <View style={styles.firstSectionHeader}>
+              <Text>Input</Text>
+            </View>
+            {inputText ? (
+              <View style={styles.content}>
+                <Text>{preserveWhitespaceForPdf(inputText)}</Text>
+              </View>
+            ) : null}
+            {inputImages.length > 0 && (
+              <View style={styles.imageRow}>
+                {inputImages.map((img, i) => (
+                  <View
+                    key={i}
+                    style={i % 2 === 0 ? styles.gridCellLeft : styles.gridCellRight}
+                  >
+                    <Image
+                      src={typeof img === "string" ? img : img.src}
+                      style={styles.image}
+                    />
+                    {typeof img !== "string" && img.caption && img.caption.trim() ? (
+                      <Text style={styles.caption}>{img.caption.trim()}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
-          {image && (
-            <View style={styles.imageContainer}>
-              <Image src={image} style={styles.image} />
+        )}
+
+        {/* OUTPUT */}
+        {hasOutput && (
+          <View>
+            <View style={hasInput ? styles.sectionHeader : styles.firstSectionHeader}>
+              <Text>Output</Text>
             </View>
-          )}
-          {output && (
-            <View style={styles.code}>
-              <Text>{preserveWhitespaceForPdf(output)}</Text>
-            </View>
-          )}
-        </>
-      )}
-    </Page>
-  </Document>
-);
+            {outputText ? (
+              <View style={styles.content}>
+                <Text>{preserveWhitespaceForPdf(outputText)}</Text>
+              </View>
+            ) : null}
+            {outputImages.length > 0 && (
+              <View style={styles.imageRow}>
+                {outputImages.map((img, i) => (
+                  <View
+                    key={i}
+                    style={i % 2 === 0 ? styles.gridCellLeft : styles.gridCellRight}
+                  >
+                    <Image
+                      src={typeof img === "string" ? img : img.src}
+                      style={styles.image}
+                    />
+                    {typeof img !== "string" && img.caption && img.caption.trim() ? (
+                      <Text style={styles.caption}>{img.caption.trim()}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </Page>
+    </Document>
+  );
+};

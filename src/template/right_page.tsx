@@ -28,11 +28,11 @@ interface ExperimentPDFDocumentProps {
   experimentTitle: string;
   experimentAim: string;
   algorithmSteps: AlgorithmStep[];
+  experimentProgram: string;
   experimentResult: string;
   resultOnNewPage: boolean;
 }
 
-// Create styles
 const styles = StyleSheet.create({
   page: {
     padding: "1cm",
@@ -40,14 +40,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 0.7,
   },
-  header: {
-    display: "flex",
+  headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     width: "100%",
-    alignItems: "center",
-    fontSize: "13px",
     marginBottom: "1.5cm",
+  },
+  headerBlock: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+  },
+  headerText: {
+    fontSize: 13,
+    marginBottom: 5,
   },
   title: {
     textAlign: "center",
@@ -94,27 +99,41 @@ export const ExperimentPDFDocument = ({
   experimentTitle,
   experimentAim,
   algorithmSteps,
+  experimentProgram,
   experimentResult,
   resultOnNewPage,
 }: ExperimentPDFDocumentProps) => (
   <Document>
+    {/* ══════════════ RIGHT PAGE — Aim, Algorithm, Program, Result ══════════════ */}
     <Page size="A4" style={styles.page}>
-      <View style={styles.header}>
-        <Text>Experiment No.: {experimentNumber || "_____"}</Text>
-        <Text>Date: {experimentDate || "______"}</Text>
+      {/* Header: Exp No and Date stacked, aligned to top-right */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerBlock}>
+          <Text style={styles.headerText}>
+            Experiment No.: {experimentNumber || "_____"}
+          </Text>
+          <Text style={styles.headerText}>
+            Date: {experimentDate || "______"}
+          </Text>
+        </View>
       </View>
 
+      {/* Title */}
       <View style={styles.title}>
         <Text>{experimentTitle || "EXPERIMENT TITLE"}</Text>
       </View>
 
+      {/* AIM */}
       <View style={styles.sectionHeader}>
         <Text>Aim:</Text>
       </View>
       <View style={styles.content}>
-        <Text>{experimentAim || "The aim of the experiment is not specified!..."}</Text>
+        <Text>
+          {experimentAim || "The aim of the experiment is not specified!..."}
+        </Text>
       </View>
 
+      {/* ALGORITHM */}
       <View style={styles.sectionHeader}>
         <Text>Algorithm:</Text>
       </View>
@@ -135,12 +154,17 @@ export const ExperimentPDFDocument = ({
                   </View>
                 )}
                 <View style={styles.listContent}>
-                  <Text style={{ 
-                    fontWeight: step.isHeading ? 'bold' : 'normal',
-                    fontSize: step.isHeading ? 13 : 12,
-                    marginTop: step.isHeading && index !== 0 ? 5 : 0
-                  }}>
-                    {step.text || (step.isHeading ? "Sub-Heading" : `Step ${stepCounter}`)}
+                  <Text
+                    style={{
+                      fontWeight: step.isHeading ? "bold" : "normal",
+                      fontSize: step.isHeading ? 13 : 12,
+                      marginTop: step.isHeading && index !== 0 ? 5 : 0,
+                    }}
+                  >
+                    {step.text ||
+                      (step.isHeading
+                        ? "Sub-Heading"
+                        : `Step ${stepCounter}`)}
                   </Text>
                   {step.hasCode && (
                     <View style={styles.codeBlock}>
@@ -158,6 +182,19 @@ export const ExperimentPDFDocument = ({
         })()}
       </View>
 
+      {/* PROGRAM */}
+      <View style={styles.sectionHeader}>
+        <Text>Program:</Text>
+      </View>
+      <View style={styles.codeBlock}>
+        <Text>
+          {preserveWhitespaceForPdf(
+            experimentProgram || "// Enter your program here"
+          )}
+        </Text>
+      </View>
+
+      {/* RESULT — same page */}
       {!resultOnNewPage && (
         <>
           <View style={styles.sectionHeader}>
@@ -173,9 +210,10 @@ export const ExperimentPDFDocument = ({
       )}
     </Page>
 
+    {/* RESULT — new page if toggled */}
     {resultOnNewPage && (
       <Page size="A4" style={styles.page}>
-        <View style={{...styles.sectionHeader, marginTop: "2cm"}}>
+        <View style={{ ...styles.sectionHeader, marginTop: "2cm" }}>
           <Text>Result:</Text>
         </View>
         <View style={styles.content}>

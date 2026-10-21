@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { PDFDocument } from "@/template/left_page";
+import { PDFDocument, type ImageItem } from "@/template/left_page";
 import { ExperimentPDFDocument } from "@/template/right_page";
 import { IndexPDFDocument } from "@/template/index_page";
 import { Download, FileDown } from "lucide-react";
@@ -15,17 +15,21 @@ interface AlgorithmStep {
   isHeading?: boolean;
 }
 
+// ── Left-page (Test Data(Input and Output)) button ──────────────────────────
+
 interface SimplePDFProps {
-  program: string;
-  output?: string;
-  image?: string;
+  inputText?: string;
+  inputImages?: ImageItem[];
+  outputText?: string;
+  outputImages?: ImageItem[];
   resetTrigger?: string | number | Record<string, unknown>;
 }
 
 export function PDFDownloadButton({
-  program,
-  output,
-  image,
+  inputText,
+  inputImages = [],
+  outputText,
+  outputImages = [],
   resetTrigger,
 }: SimplePDFProps) {
   const [isActive, setIsActive] = useState(false);
@@ -36,20 +40,25 @@ export function PDFDownloadButton({
     }
   }, [resetTrigger]);
 
-  const safeImage =
-    typeof image === "string" && image.startsWith("data:image/")
-      ? image
-      : undefined;
-
-  const safeOutput = output && output.trim() !== "" ? output : undefined;
+  const safeInputImages: ImageItem[] = inputImages
+    .map((img) => (typeof img === "string" ? { src: img, caption: "" } : img))
+    .filter(
+      (img): img is ImageItem =>
+        typeof img?.src === "string" &&
+        (img.src.startsWith("data:image/") || img.src.startsWith("http"))
+    );
+  const safeOutputImages: ImageItem[] = outputImages
+    .map((img) => (typeof img === "string" ? { src: img, caption: "" } : img))
+    .filter(
+      (img): img is ImageItem =>
+        typeof img?.src === "string" &&
+        (img.src.startsWith("data:image/") || img.src.startsWith("http"))
+    );
 
   if (!isActive) {
     return (
       <Button
-        onClick={() => {
-          console.log("Button clicked, activating PDF generation");
-          setIsActive(true);
-        }}
+        onClick={() => setIsActive(true)}
         className="flex items-center gap-2"
         variant="outline"
       >
@@ -65,21 +74,16 @@ export function PDFDownloadButton({
         <PDFDownloadLink
           document={
             <PDFDocument
-              program={program}
-              output={safeOutput}
-              image={safeImage}
+              inputText={inputText}
+              inputImages={safeInputImages}
+              outputText={outputText}
+              outputImages={safeOutputImages}
             />
           }
-          fileName="leftside.pdf"
+          fileName="left_page.pdf"
           className="inline-block"
         >
-          {({ loading, error, url }) => {
-            console.log("PDFDownloadLink state:", {
-              loading,
-              error,
-              hasUrl: !!url,
-            });
-
+          {({ loading, error }) => {
             if (error) {
               console.error("PDF generation error:", error);
               return (
@@ -93,7 +97,6 @@ export function PDFDownloadButton({
                 </Button>
               );
             }
-
             return (
               <Button
                 disabled={loading}
@@ -111,6 +114,8 @@ export function PDFDownloadButton({
   );
 }
 
+// ── Right-page (Aim, Algorithm & Result) button ──────────────────────────────
+
 interface ExperimentPDFProps {
   experimentData: {
     experimentNumber: string;
@@ -118,6 +123,7 @@ interface ExperimentPDFProps {
     experimentTitle: string;
     experimentAim: string;
     algorithmSteps: AlgorithmStep[];
+    experimentProgram: string;
     experimentResult: string;
     resultOnNewPage: boolean;
   };
@@ -147,6 +153,7 @@ export function ExperimentPDFDownloadButton({
       code: String(step.code || ""),
       isHeading: Boolean(step.isHeading),
     })),
+    experimentProgram: experimentData.experimentProgram || "",
     experimentResult: experimentData.experimentResult || "",
     resultOnNewPage: Boolean(experimentData.resultOnNewPage),
   };
@@ -154,10 +161,7 @@ export function ExperimentPDFDownloadButton({
   if (!isActive) {
     return (
       <Button
-        onClick={() => {
-          console.log("Button clicked, activating PDF generation");
-          setIsActive(true);
-        }}
+        onClick={() => setIsActive(true)}
         className="flex items-center gap-2"
         variant="outline"
       >
@@ -178,20 +182,15 @@ export function ExperimentPDFDownloadButton({
               experimentTitle={safeData.experimentTitle}
               experimentAim={safeData.experimentAim}
               algorithmSteps={safeData.algorithmSteps}
+              experimentProgram={safeData.experimentProgram}
               experimentResult={safeData.experimentResult}
               resultOnNewPage={safeData.resultOnNewPage}
             />
           }
-          fileName="rightside.pdf"
+          fileName="right_page.pdf"
           className="inline-block"
         >
-          {({ loading, error, url }) => {
-            console.log("PDFDownloadLink state:", {
-              loading,
-              error,
-              hasUrl: !!url,
-            });
-
+          {({ loading, error }) => {
             if (error) {
               console.error("PDF generation error:", error);
               return (
@@ -205,7 +204,6 @@ export function ExperimentPDFDownloadButton({
                 </Button>
               );
             }
-
             return (
               <Button
                 disabled={loading}
@@ -222,6 +220,8 @@ export function ExperimentPDFDownloadButton({
     </div>
   );
 }
+
+// ── Index button (unchanged) ─────────────────────────────────────────────────
 
 interface IndexPDFProps {
   entries: Array<{
@@ -251,10 +251,7 @@ export function IndexPDFDownloadButton({
   if (!isActive) {
     return (
       <Button
-        onClick={() => {
-          console.log("Button clicked, activating PDF generation");
-          setIsActive(true);
-        }}
+        onClick={() => setIsActive(true)}
         className="flex items-center gap-2"
         variant="outline"
       >
@@ -272,13 +269,7 @@ export function IndexPDFDownloadButton({
           fileName="index.pdf"
           className="inline-block"
         >
-          {({ loading, error, url }) => {
-            console.log("PDFDownloadLink state:", {
-              loading,
-              error,
-              hasUrl: !!url,
-            });
-
+          {({ loading, error }) => {
             if (error) {
               console.error("PDF generation error:", error);
               return (
@@ -292,7 +283,6 @@ export function IndexPDFDownloadButton({
                 </Button>
               );
             }
-
             return (
               <Button
                 disabled={loading}

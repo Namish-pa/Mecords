@@ -81,6 +81,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
   },
+  codeText: {
+    fontFamily: "Courier",
+    fontSize: 10,
+    lineHeight: 1.4,
+  },
   listItem: {
     flexDirection: "row",
     marginBottom: 8,
@@ -168,7 +173,7 @@ export const ExperimentPDFDocument = ({
                   </Text>
                   {step.hasCode && (
                     <View style={styles.codeBlock}>
-                      <Text>
+                      <Text style={styles.codeText}>
                         {preserveWhitespaceForPdf(
                           step.code || "% Enter the Pseudo Code here"
                         )}
@@ -187,7 +192,7 @@ export const ExperimentPDFDocument = ({
         <Text>Program:</Text>
       </View>
       <View style={styles.codeBlock}>
-        <Text>
+        <Text style={styles.codeText}>
           {preserveWhitespaceForPdf(
             experimentProgram || "// Enter your program here"
           )}

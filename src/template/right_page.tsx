@@ -60,6 +60,7 @@ const styles = StyleSheet.create({
     fontFamily: "Latin Modern Roman",
     marginBottom: "1.5cm",
     textTransform: "uppercase",
+    lineHeight: 1.3,
   },
   sectionHeader: {
     fontSize: 14,

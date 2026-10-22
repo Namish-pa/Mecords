@@ -38,7 +38,7 @@ import Image from "next/image";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { type ImageItem } from "@/template/left_page";
+import { type ImageItem, type TestCase } from "@/template/left_page";
 
 const PDFDownloadButton = dynamic(
   () =>
@@ -95,13 +95,21 @@ export default function Home() {
   const COVER_PAGE_DOC_URL =
     "https://www.dropbox.com/scl/fo/qquvekt18178myxhrtmdz/ADwXBUgmfLa6QiHLl7ZCde4/COVER%20PAGE%20(%20MEC%20LAB%20RECORD%20).docx?rlkey=bx9dl3nyf7kisnxgj87aqv1xr&st=1r32p60i&dl=0";
 
-  // ── Test Data(Input and Output) (left page) state ─────────────────────
-  const [inputText, setInputText] = useState("");
-  const [inputImages, setInputImages] = useState<ImageItem[]>([]);
-  const inputImagesRef = useRef<HTMLInputElement>(null);
-  const [outputText, setOutputText] = useState("");
-  const [outputImages, setOutputImages] = useState<ImageItem[]>([]);
-  const outputImagesRef = useRef<HTMLInputElement>(null);
+  // ── Test Data (Input and Output) (left page) state ──────────────────────────
+  const [testCases, setTestCases] = useState<TestCase[]>(() => [
+    {
+      id: crypto.randomUUID(),
+      inputText: "",
+      inputImages: [],
+      outputText: "",
+      outputImages: [],
+    },
+  ]);
+
+  // Stable map of hidden <input type="file"> elements.
+  // Keyed by `${tcId}-input` or `${tcId}-output` so stable ids survive removals
+  // without mixing up the refs of remaining cards.
+  const imageInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   // ── Aim, Algorithm & Result (right page) state ──────────────────────────
   const [experimentNumber, setExperimentNumber] = useState("");
@@ -261,47 +269,106 @@ export default function Home() {
     }
   };
 
-  const readFiles = (
+  // ── Test-case CRUD ─────────────────────────────────────────────────────────
+
+  const addTestCase = () => {
+    setTestCases((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        inputText: "",
+        inputImages: [],
+        outputText: "",
+        outputImages: [],
+      },
+    ]);
+  };
+
+  const removeTestCase = (id: string) => {
+    setTestCases((prev) => {
+      if (prev.length <= 1) return prev;
+      // Remove the hidden-input refs so they don't linger after the card unmounts
+      imageInputRefs.current.delete(`${id}-input`);
+      imageInputRefs.current.delete(`${id}-output`);
+      return prev.filter((tc) => tc.id !== id);
+    });
+  };
+
+  const updateTestCaseText = (
+    id: string,
+    field: "inputText" | "outputText",
+    value: string
+  ) => {
+    setTestCases((prev) =>
+      prev.map((tc) => (tc.id === id ? { ...tc, [field]: value } : tc))
+    );
+  };
+
+  const handleImagesUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    setter: React.Dispatch<React.SetStateAction<ImageItem[]>>,
-    ref: React.RefObject<HTMLInputElement | null>
+    tcId: string,
+    side: "inputImages" | "outputImages"
   ) => {
     const files = Array.from(e.target.files || []);
     files.forEach((file) => {
       if (!file.type.startsWith("image/")) return;
       const reader = new FileReader();
       reader.onload = () => {
-        setter((prev) => [
-          ...prev,
-          { src: reader.result as string, caption: "" },
-        ]);
+        setTestCases((prev) =>
+          prev.map((tc) =>
+            tc.id === tcId
+              ? {
+                  ...tc,
+                  [side]: [
+                    ...(tc[side] ?? []),
+                    { src: reader.result as string, caption: "" },
+                  ],
+                }
+              : tc
+          )
+        );
       };
       reader.readAsDataURL(file);
     });
-    if (ref.current) ref.current.value = "";
+    // Reset the hidden file input via the stable ref map
+    const refKey = side === "inputImages" ? `${tcId}-input` : `${tcId}-output`;
+    const el = imageInputRefs.current.get(refKey);
+    if (el) el.value = "";
   };
 
-  const handleInputImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) =>
-    readFiles(e, setInputImages, inputImagesRef);
-
-  const removeInputImage = (index: number) =>
-    setInputImages((prev) => prev.filter((_, i) => i !== index));
-
-  const updateInputImageCaption = (index: number, caption: string) =>
-    setInputImages((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, caption } : item))
+  const removeImage = (
+    tcId: string,
+    side: "inputImages" | "outputImages",
+    imgIdx: number
+  ) => {
+    setTestCases((prev) =>
+      prev.map((tc) =>
+        tc.id === tcId
+          ? { ...tc, [side]: (tc[side] ?? []).filter((_, i) => i !== imgIdx) }
+          : tc
+      )
     );
+  };
 
-  const handleOutputImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) =>
-    readFiles(e, setOutputImages, outputImagesRef);
-
-  const removeOutputImage = (index: number) =>
-    setOutputImages((prev) => prev.filter((_, i) => i !== index));
-
-  const updateOutputImageCaption = (index: number, caption: string) =>
-    setOutputImages((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, caption } : item))
+  const updateImageCaption = (
+    tcId: string,
+    side: "inputImages" | "outputImages",
+    imgIdx: number,
+    caption: string
+  ) => {
+    setTestCases((prev) =>
+      prev.map((tc) =>
+        tc.id === tcId
+          ? {
+              ...tc,
+              [side]: (tc[side] ?? []).map((img, i) =>
+                i === imgIdx ? { ...img, caption } : img
+              ),
+            }
+          : tc
+      )
     );
+  };
 
   const handleIndexPDFDownload = () => {
     if (typeof window === "undefined") return null;
@@ -405,196 +472,319 @@ export default function Home() {
           <Card className="shadow-sm border-slate-200">
             <CardContent className="pt-6">
               {templateType === "simple" ? (
-                <div className="grid gap-6">
-                  {/* ── INPUT section ─────────────────────────────────── */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileOutput className="h-4 w-4 text-slate-500" />
-                      <Label htmlFor="input-text" className="font-medium">Input</Label>
-                    </div>
-                    <Textarea
-                      id="input-text"
-                      placeholder="Enter input description or commands..."
-                      className="min-h-[120px] font-mono bg-slate-50"
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <ImageIcon className="h-4 w-4 text-slate-500" />
-                      <Label className="font-medium">Input Images (optional)</Label>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => inputImagesRef.current?.click()}
-                          className="bg-slate-50"
-                        >
-                          Add Image(s)
-                        </Button>
-                        <Input
-                          ref={inputImagesRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleInputImagesUpload}
-                          className="hidden"
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          {inputImages.length === 0
-                            ? "No images added"
-                            : `${inputImages.length} image${
-                                inputImages.length > 1 ? "s" : ""
-                              } added`}
-                        </p>
-                      </div>
-                      {inputImages.length > 0 && (
-                        <div className="flex flex-wrap gap-3 mt-2">
-                          {inputImages.map((img, idx) => (
-                            <div
-                              key={idx}
-                              className="relative border rounded-md p-2 bg-slate-50 w-[150px] flex flex-col"
+                <div className="grid gap-4">
+                  {testCases.map((tc, tcIdx) => (
+                    <Card
+                      key={tc.id}
+                      className="border border-slate-200 bg-slate-50 shadow-none"
+                    >
+                      <CardContent className="p-4">
+                        {/* Card heading row */}
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-semibold text-slate-800">
+                            Test Case {tcIdx + 1}
+                          </h3>
+                          {testCases.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => removeTestCase(tc.id)}
+                              title="Remove this test case"
                             >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-1 right-1 h-5 w-5 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500 z-10"
-                                onClick={() => removeInputImage(idx)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                              <div className="h-[80px] flex items-center justify-center overflow-hidden">
-                                <Image
-                                  src={img.src}
-                                  alt={`Input image ${idx + 1}`}
-                                  width={120}
-                                  height={80}
-                                  style={{ objectFit: "contain", maxHeight: "80px" }}
-                                />
-                              </div>
-                              <div className="mt-2 flex flex-col gap-1">
-                                <Label
-                                  htmlFor={`input-desc-${idx}`}
-                                  className="text-xs text-muted-foreground font-medium"
-                                >
-                                  Description
-                                </Label>
-                                <Input
-                                  id={`input-desc-${idx}`}
-                                  type="text"
-                                  placeholder="Caption..."
-                                  value={img.caption}
-                                  onChange={(e) =>
-                                    updateInputImageCaption(idx, e.target.value)
-                                  }
-                                  className="h-7 text-xs px-2 bg-white"
-                                />
-                              </div>
-                            </div>
-                          ))}
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* ── OUTPUT section ────────────────────────────────── */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileOutput className="h-4 w-4 text-slate-500" />
-                      <Label htmlFor="output-text" className="font-medium">Output</Label>
-                    </div>
-                    <Textarea
-                      id="output-text"
-                      placeholder="Enter output description or commands..."
-                      className="min-h-[120px] font-mono bg-slate-50"
-                      value={outputText}
-                      onChange={(e) => setOutputText(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <ImageIcon className="h-4 w-4 text-slate-500" />
-                      <Label className="font-medium">Output Images (optional)</Label>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => outputImagesRef.current?.click()}
-                          className="bg-slate-50"
-                        >
-                          Add Image(s)
-                        </Button>
-                        <Input
-                          ref={outputImagesRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleOutputImagesUpload}
-                          className="hidden"
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          {outputImages.length === 0
-                            ? "No images added"
-                            : `${outputImages.length} image${
-                                outputImages.length > 1 ? "s" : ""
-                              } added`}
-                        </p>
-                      </div>
-                      {outputImages.length > 0 && (
-                        <div className="flex flex-wrap gap-3 mt-2">
-                          {outputImages.map((img, idx) => (
-                            <div
-                              key={idx}
-                              className="relative border rounded-md p-2 bg-slate-50 w-[150px] flex flex-col"
-                            >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-1 right-1 h-5 w-5 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500 z-10"
-                                onClick={() => removeOutputImage(idx)}
+                        <div className="grid gap-6">
+                          {/* ── INPUT ───────────────────────────────────── */}
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <FileOutput className="h-4 w-4 text-slate-500" />
+                              <Label
+                                htmlFor={`input-text-${tc.id}`}
+                                className="font-medium"
                               >
-                                <X className="h-3 w-3" />
-                              </Button>
-                              <div className="h-[80px] flex items-center justify-center overflow-hidden">
-                                <Image
-                                  src={img.src}
-                                  alt={`Output image ${idx + 1}`}
-                                  width={120}
-                                  height={80}
-                                  style={{ objectFit: "contain", maxHeight: "80px" }}
-                                />
-                              </div>
-                              <div className="mt-2 flex flex-col gap-1">
-                                <Label
-                                  htmlFor={`output-desc-${idx}`}
-                                  className="text-xs text-muted-foreground font-medium"
-                                >
-                                  Description
-                                </Label>
-                                <Input
-                                  id={`output-desc-${idx}`}
-                                  type="text"
-                                  placeholder="Caption..."
-                                  value={img.caption}
-                                  onChange={(e) =>
-                                    updateOutputImageCaption(idx, e.target.value)
-                                  }
-                                  className="h-7 text-xs px-2 bg-white"
-                                />
-                              </div>
+                                Input
+                              </Label>
                             </div>
-                          ))}
+                            <Textarea
+                              id={`input-text-${tc.id}`}
+                              placeholder="Enter input description or commands..."
+                              className="min-h-[120px] font-mono bg-white"
+                              value={tc.inputText ?? ""}
+                              onChange={(e) =>
+                                updateTestCaseText(tc.id, "inputText", e.target.value)
+                              }
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <ImageIcon className="h-4 w-4 text-slate-500" />
+                              <Label className="font-medium">
+                                Input Images (optional)
+                              </Label>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  onClick={() =>
+                                    imageInputRefs.current
+                                      .get(`${tc.id}-input`)
+                                      ?.click()
+                                  }
+                                  className="bg-white"
+                                >
+                                  Add Image(s)
+                                </Button>
+                                {/* Native <input> so the ref callback can store the
+                                    HTMLInputElement directly into the stable Map. */}
+                                <input
+                                  ref={(el) => {
+                                    if (el)
+                                      imageInputRefs.current.set(
+                                        `${tc.id}-input`,
+                                        el
+                                      );
+                                    else
+                                      imageInputRefs.current.delete(
+                                        `${tc.id}-input`
+                                      );
+                                  }}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) =>
+                                    handleImagesUpload(e, tc.id, "inputImages")
+                                  }
+                                  className="hidden"
+                                />
+                                <p className="text-sm text-muted-foreground">
+                                  {(tc.inputImages ?? []).length === 0
+                                    ? "No images added"
+                                    : `${(tc.inputImages ?? []).length} image${
+                                        (tc.inputImages ?? []).length > 1
+                                          ? "s"
+                                          : ""
+                                      } added`}
+                                </p>
+                              </div>
+                              {(tc.inputImages ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-3 mt-2">
+                                  {(tc.inputImages ?? []).map((img, imgIdx) => (
+                                    <div
+                                      key={imgIdx}
+                                      className="relative border rounded-md p-2 bg-white w-[150px] flex flex-col"
+                                    >
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute top-1 right-1 h-5 w-5 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500 z-10"
+                                        onClick={() =>
+                                          removeImage(tc.id, "inputImages", imgIdx)
+                                        }
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                      <div className="h-[80px] flex items-center justify-center overflow-hidden">
+                                        <Image
+                                          src={img.src}
+                                          alt={`Input image ${imgIdx + 1}`}
+                                          width={120}
+                                          height={80}
+                                          style={{
+                                            objectFit: "contain",
+                                            maxHeight: "80px",
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="mt-2 flex flex-col gap-1">
+                                        <Label
+                                          htmlFor={`input-desc-${tc.id}-${imgIdx}`}
+                                          className="text-xs text-muted-foreground font-medium"
+                                        >
+                                          Description
+                                        </Label>
+                                        <Input
+                                          id={`input-desc-${tc.id}-${imgIdx}`}
+                                          type="text"
+                                          placeholder="Caption..."
+                                          value={img.caption}
+                                          onChange={(e) =>
+                                            updateImageCaption(
+                                              tc.id,
+                                              "inputImages",
+                                              imgIdx,
+                                              e.target.value
+                                            )
+                                          }
+                                          className="h-7 text-xs px-2 bg-white"
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── OUTPUT ──────────────────────────────────── */}
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <FileOutput className="h-4 w-4 text-slate-500" />
+                              <Label
+                                htmlFor={`output-text-${tc.id}`}
+                                className="font-medium"
+                              >
+                                Output
+                              </Label>
+                            </div>
+                            <Textarea
+                              id={`output-text-${tc.id}`}
+                              placeholder="Enter output description or commands..."
+                              className="min-h-[120px] font-mono bg-white"
+                              value={tc.outputText ?? ""}
+                              onChange={(e) =>
+                                updateTestCaseText(
+                                  tc.id,
+                                  "outputText",
+                                  e.target.value
+                                )
+                              }
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <ImageIcon className="h-4 w-4 text-slate-500" />
+                              <Label className="font-medium">
+                                Output Images (optional)
+                              </Label>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  onClick={() =>
+                                    imageInputRefs.current
+                                      .get(`${tc.id}-output`)
+                                      ?.click()
+                                  }
+                                  className="bg-white"
+                                >
+                                  Add Image(s)
+                                </Button>
+                                <input
+                                  ref={(el) => {
+                                    if (el)
+                                      imageInputRefs.current.set(
+                                        `${tc.id}-output`,
+                                        el
+                                      );
+                                    else
+                                      imageInputRefs.current.delete(
+                                        `${tc.id}-output`
+                                      );
+                                  }}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) =>
+                                    handleImagesUpload(e, tc.id, "outputImages")
+                                  }
+                                  className="hidden"
+                                />
+                                <p className="text-sm text-muted-foreground">
+                                  {(tc.outputImages ?? []).length === 0
+                                    ? "No images added"
+                                    : `${(tc.outputImages ?? []).length} image${
+                                        (tc.outputImages ?? []).length > 1
+                                          ? "s"
+                                          : ""
+                                      } added`}
+                                </p>
+                              </div>
+                              {(tc.outputImages ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-3 mt-2">
+                                  {(tc.outputImages ?? []).map((img, imgIdx) => (
+                                    <div
+                                      key={imgIdx}
+                                      className="relative border rounded-md p-2 bg-white w-[150px] flex flex-col"
+                                    >
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute top-1 right-1 h-5 w-5 bg-white/80 rounded-full hover:bg-red-50 hover:text-red-500 z-10"
+                                        onClick={() =>
+                                          removeImage(
+                                            tc.id,
+                                            "outputImages",
+                                            imgIdx
+                                          )
+                                        }
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                      <div className="h-[80px] flex items-center justify-center overflow-hidden">
+                                        <Image
+                                          src={img.src}
+                                          alt={`Output image ${imgIdx + 1}`}
+                                          width={120}
+                                          height={80}
+                                          style={{
+                                            objectFit: "contain",
+                                            maxHeight: "80px",
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="mt-2 flex flex-col gap-1">
+                                        <Label
+                                          htmlFor={`output-desc-${tc.id}-${imgIdx}`}
+                                          className="text-xs text-muted-foreground font-medium"
+                                        >
+                                          Description
+                                        </Label>
+                                        <Input
+                                          id={`output-desc-${tc.id}-${imgIdx}`}
+                                          type="text"
+                                          placeholder="Caption..."
+                                          value={img.caption}
+                                          onChange={(e) =>
+                                            updateImageCaption(
+                                              tc.id,
+                                              "outputImages",
+                                              imgIdx,
+                                              e.target.value
+                                            )
+                                          }
+                                          className="h-7 text-xs px-2 bg-white"
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {/* Add Test Case button */}
+                  <Button
+                    variant="outline"
+                    onClick={addTestCase}
+                    className="flex items-center gap-2 w-full border-dashed"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Test Case
+                  </Button>
                 </div>
               ) : templateType === "experiment" ? (
                 <div className="grid gap-6">
@@ -970,84 +1160,121 @@ export default function Home() {
               <div className="bg-white border border-slate-200 rounded-md p-8 shadow-sm max-w-[800px] mx-auto">
                 {templateType === "simple" ? (
                   <div className="a4-preview simple-template">
-                    {/* Input preview */}
-                    {(inputText || inputImages.length > 0) && (
-                      <div className="mb-6">
-                        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                          <FileOutput className="h-4.5 w-4.5 text-slate-500" />
-                          Input
-                        </h3>
-                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200 space-y-3">
-                          {inputText && (
-                            <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
-                              {inputText}
-                            </pre>
-                          )}
-                          {inputImages.length > 0 && (
-                            <div className="grid grid-cols-2 gap-4">
-                              {inputImages.map((img, idx) => (
-                                <div key={idx} className="flex flex-col items-center">
-                                  <Image
-                                    src={img.src}
-                                    alt={`Input image ${idx + 1}`}
-                                    width={400}
-                                    height={200}
-                                    style={{ objectFit: "contain", maxHeight: "200px" }}
-                                  />
-                                  {img.caption ? (
-                                    <p className="text-xs text-slate-500 mt-1 text-center font-serif">
-                                      {img.caption}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ))}
+                    {testCases.map((tc, tcIdx) => {
+                      const hasInput = !!(
+                        tc.inputText || (tc.inputImages ?? []).length > 0
+                      );
+                      const hasOutput = !!(
+                        tc.outputText || (tc.outputImages ?? []).length > 0
+                      );
+                      return (
+                        <div
+                          key={tc.id}
+                          className={
+                            tcIdx > 0
+                              ? "mt-8 pt-6 border-t border-slate-200"
+                              : ""
+                          }
+                        >
+                          <h3 className="text-lg font-semibold mb-3 underline">
+                            Test Case {tcIdx + 1}
+                          </h3>
+
+                          {/* Input preview */}
+                          {hasInput && (
+                            <div className="mb-4">
+                              <h4 className="text-base font-semibold mb-2 flex items-center gap-2 underline">
+                                <FileOutput className="h-4 w-4 text-slate-500" />
+                                Input
+                              </h4>
+                              <div className="bg-slate-50 p-4 rounded-md border border-slate-200 space-y-3">
+                                {tc.inputText && (
+                                  <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
+                                    {tc.inputText}
+                                  </pre>
+                                )}
+                                {(tc.inputImages ?? []).length > 0 && (
+                                  <div className="grid grid-cols-2 gap-4">
+                                    {(tc.inputImages ?? []).map((img, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="flex flex-col items-center"
+                                      >
+                                        <Image
+                                          src={img.src}
+                                          alt={`Input image ${idx + 1}`}
+                                          width={400}
+                                          height={200}
+                                          style={{
+                                            objectFit: "contain",
+                                            maxHeight: "200px",
+                                          }}
+                                        />
+                                        {img.caption ? (
+                                          <p className="text-xs text-slate-500 mt-1 text-center font-serif">
+                                            {img.caption}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Output preview */}
-                    {(outputText || outputImages.length > 0) && (
-                      <div className="mb-6">
-                        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                          <FileOutput className="h-4.5 w-4.5 text-slate-500" />
-                          Output
-                        </h3>
-                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200 space-y-3">
-                          {outputText && (
-                            <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
-                              {outputText}
-                            </pre>
-                          )}
-                          {outputImages.length > 0 && (
-                            <div className="grid grid-cols-2 gap-4">
-                              {outputImages.map((img, idx) => (
-                                <div key={idx} className="flex flex-col items-center">
-                                  <Image
-                                    src={img.src}
-                                    alt={`Output image ${idx + 1}`}
-                                    width={400}
-                                    height={200}
-                                    style={{ objectFit: "contain", maxHeight: "200px" }}
-                                  />
-                                  {img.caption ? (
-                                    <p className="text-xs text-slate-500 mt-1 text-center font-serif">
-                                      {img.caption}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ))}
+                          {/* Output preview */}
+                          {hasOutput && (
+                            <div className="mb-4">
+                              <h4 className="text-base font-semibold mb-2 flex items-center gap-2 underline">
+                                <FileOutput className="h-4 w-4 text-slate-500" />
+                                Output
+                              </h4>
+                              <div className="bg-slate-50 p-4 rounded-md border border-slate-200 space-y-3">
+                                {tc.outputText && (
+                                  <pre className="whitespace-pre-wrap font-mono text-sm text-slate-800">
+                                    {tc.outputText}
+                                  </pre>
+                                )}
+                                {(tc.outputImages ?? []).length > 0 && (
+                                  <div className="grid grid-cols-2 gap-4">
+                                    {(tc.outputImages ?? []).map((img, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="flex flex-col items-center"
+                                      >
+                                        <Image
+                                          src={img.src}
+                                          alt={`Output image ${idx + 1}`}
+                                          width={400}
+                                          height={200}
+                                          style={{
+                                            objectFit: "contain",
+                                            maxHeight: "200px",
+                                          }}
+                                        />
+                                        {img.caption ? (
+                                          <p className="text-xs text-slate-500 mt-1 text-center font-serif">
+                                            {img.caption}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Fallback when nothing entered */}
-                    {!inputText && inputImages.length === 0 && !outputText && outputImages.length === 0 && (
-                      <p className="text-sm text-slate-400 italic">Enter input or output above to see a preview.</p>
-                    )}
+                          {/* Fallback for an empty test case */}
+                          {!hasInput && !hasOutput && (
+                            <p className="text-sm text-slate-400 italic">
+                              Enter input or output above to see a preview.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : templateType === "experiment" ? (
                   <div className="a4-preview experiment-template">
@@ -1247,17 +1474,9 @@ export default function Home() {
         {templateType === "simple" ? (
           <Suspense fallback={<Button disabled>Loading PDF...</Button>}>
             <PDFDownloadButton
-              key={`pdf-simple-${Date.now()}`}
-              inputText={inputText}
-              inputImages={inputImages}
-              outputText={outputText}
-              outputImages={outputImages}
-              resetTrigger={JSON.stringify({
-                inputText,
-                inputImages,
-                outputText,
-                outputImages,
-              })}
+              key={`pdf-simple-${testCases.length}-${Date.now()}`}
+              testCases={testCases}
+              resetTrigger={JSON.stringify(testCases)}
             />
           </Suspense>
         ) : templateType === "experiment" ? (

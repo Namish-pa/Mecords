@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { PDFDocument, type ImageItem } from "@/template/left_page";
+import { PDFDocument, type ImageItem, type TestCase } from "@/template/left_page";
 import { ExperimentPDFDocument } from "@/template/right_page";
 import { IndexPDFDocument } from "@/template/index_page";
 import { Download, FileDown } from "lucide-react";
@@ -18,20 +18,11 @@ interface AlgorithmStep {
 // ── Left-page (Test Data(Input and Output)) button ──────────────────────────
 
 interface SimplePDFProps {
-  inputText?: string;
-  inputImages?: ImageItem[];
-  outputText?: string;
-  outputImages?: ImageItem[];
+  testCases: TestCase[];
   resetTrigger?: string | number | Record<string, unknown>;
 }
 
-export function PDFDownloadButton({
-  inputText,
-  inputImages = [],
-  outputText,
-  outputImages = [],
-  resetTrigger,
-}: SimplePDFProps) {
+export function PDFDownloadButton({ testCases, resetTrigger }: SimplePDFProps) {
   const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
@@ -40,20 +31,24 @@ export function PDFDownloadButton({
     }
   }, [resetTrigger]);
 
-  const safeInputImages: ImageItem[] = inputImages
-    .map((img) => (typeof img === "string" ? { src: img, caption: "" } : img))
-    .filter(
-      (img): img is ImageItem =>
-        typeof img?.src === "string" &&
-        (img.src.startsWith("data:image/") || img.src.startsWith("http"))
-    );
-  const safeOutputImages: ImageItem[] = outputImages
-    .map((img) => (typeof img === "string" ? { src: img, caption: "" } : img))
-    .filter(
-      (img): img is ImageItem =>
-        typeof img?.src === "string" &&
-        (img.src.startsWith("data:image/") || img.src.startsWith("http"))
-    );
+  // Sanitise images in every test case before handing them to react-pdf
+  const safeTestCases: TestCase[] = testCases.map((tc) => ({
+    ...tc,
+    inputImages: (tc.inputImages ?? [])
+      .map((img) => (typeof img === "string" ? { src: img, caption: "" } : img))
+      .filter(
+        (img): img is ImageItem =>
+          typeof img?.src === "string" &&
+          (img.src.startsWith("data:image/") || img.src.startsWith("http"))
+      ),
+    outputImages: (tc.outputImages ?? [])
+      .map((img) => (typeof img === "string" ? { src: img, caption: "" } : img))
+      .filter(
+        (img): img is ImageItem =>
+          typeof img?.src === "string" &&
+          (img.src.startsWith("data:image/") || img.src.startsWith("http"))
+      ),
+  }));
 
   if (!isActive) {
     return (
@@ -72,14 +67,7 @@ export function PDFDownloadButton({
     <div className="flex gap-2">
       <div className="inline-block">
         <PDFDownloadLink
-          document={
-            <PDFDocument
-              inputText={inputText}
-              inputImages={safeInputImages}
-              outputText={outputText}
-              outputImages={safeOutputImages}
-            />
-          }
+          document={<PDFDocument testCases={safeTestCases} />}
           fileName="left_page.pdf"
           className="inline-block"
         >
